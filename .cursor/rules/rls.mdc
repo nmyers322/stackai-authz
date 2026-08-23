@@ -1,0 +1,40 @@
+---
+description: RLS is a default-deny backstop; authz/ is the authorization engine
+alwaysApply: true
+---
+
+# Row Level Security
+
+Enable RLS on every table in an exposed schema. Default-deny is the baseline. RLS is a platform backstop. It is not the authorization engine.
+
+## Connection
+
+The FastAPI process uses a privileged Postgres role (`postgres` via the pooler, `BYPASSRLS`) for every database query, including requests whose HTTP principal is anonymous (exported workflow execute). The database role is not the principal.
+
+That role has `BYPASSRLS`. Those queries do not evaluate policies. That is a bypass, not an override. Do not add policies to “grant the app role more access”; it already has full access.
+
+Authorization (view, edit, execute, delete; org role; team role; API keys; export password and org-only export) lives in `authz/` as typed Python. SQL policy expressions are not a second matrix.
+
+## anon and authenticated
+
+Enable RLS with no policies for `anon` or `authenticated` unless a feature explicitly requires database-level access for that role. None does: public, password, and org-scoped exports are decided in `authz/`.
+
+If no policy matches a role for a table and command, access is denied. Do not add a catch-all permissive policy. Do not add coarse “org isolation” policies as a substitute for `authorize()`.
+
+Revoke default `anon` / `authenticated` grants on new tables in the same migration. Enabling RLS does not remove those grants; a later accidental policy would otherwise open the table immediately.
+
+## New tables
+
+In the same migration that creates a table in an exposed schema:
+
+```sql
+ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;
+```
+
+A table in `public` without RLS is reachable through the Data API for any role that still has grants on it, including `anon`.
+
+## Do not
+
+- Do not implement the permission matrix as RLS policies.
+- Do not assume FastAPI queries run those policies; they do not.
+- Do not skip `ENABLE ROW LEVEL SECURITY` because the app “already handles it.” Enable it so paths that are not the privileged app role stay default-deny.

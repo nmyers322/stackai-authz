@@ -1,0 +1,6 @@
+fastapi[standard]==0.141.1
+pydantic-settings==2.15.0
+PyJWT[crypto]==2.13.0
+psycopg[binary,pool]==3.2.10
+pytest==8.4.1
+ruff==0.16.4

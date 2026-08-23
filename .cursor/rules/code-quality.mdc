@@ -1,0 +1,113 @@
+---
+description: Axioms for the org/team/workflow authorization service
+alwaysApply: true
+---
+
+# Authorization service axioms
+
+This codebase is an authorization service for organizations, teams, users, and workflows. Identity answers who is acting. Authorization answers whether they may perform an action. Those stay separate.
+
+## Structure
+
+Routers adapt HTTP. Services perform work. `authz/` decides allow or deny. Persistence loads memberships and resources. None of those layers absorb another layer’s job.
+
+`src/authz/engine.py` imports neither FastAPI nor a database SDK. The Postgres adapter is `src/authz/postgres.py`. A worker, CLI, or test calls the same `authorize()` as a route.
+
+Domain packages live under `src/` (`authn/`, `authz/`, `orgs/`, `teams/`, `workflows/`). HTTP packages own `router.py`, `schemas.py`, `service.py`. AuthN resolves the principal. AuthZ decides. Cross-package imports use the package name. No `import *`.
+
+## Policy
+
+`authorize(principal, action, resource) -> Decision` is the only place that knows roles.
+
+Roles are data **on memberships**, not on users: `organization_members.role` and `team_members.role`. Team admin includes editor; editor includes viewer. Super-admin bypasses team checks inside the engine, not in handlers. Org members have no org-admin powers; they act through team membership and the default org team.
+
+Adding a role or action is a catalog change plus tests. It is not a new `if` in every route.
+
+Principals are a discriminated union: user JWT, API key, anonymous. An API key is not a logged-in super-admin. It may list and execute workflows in its org; it may not delete teams or change org roles.
+
+Workflow visibility is `team | public | password | org`. A password grants anonymous execute, not a session. Org-only export requires a user in that org.
+
+Org context is the `org_id` path parameter. A token never implies “the user’s only org.”
+
+```python
+# Wrong — route owns policy and I/O
+@router.post("/teams/{team_id}/members")
+async def add_member(team_id: UUID, user=Depends(get_current_user)):
+    if user["role"] != "admin":
+        raise HTTPException(403)
+
+# Right — engine owns policy
+decision = authorize(principal, Action.TEAM_MEMBER_ADD, resource)
+if decision.denied:
+    raise AuthorizationError(decision.reason)
+```
+
+## Typing
+
+No `Any` and no `dict[str, Any]` in `authz/` or domain models. Use Pydantic models, `StrEnum`, `Literal`, and `X | Y` unions. Principals are a discriminated union on `kind`.
+
+Protocols describe stores. An in-memory fake and a Postgres adapter implement the same Protocol. `TypeVar` is bound to that Protocol when a helper is generic.
+
+A model lists only fields its consumer needs. Do not reuse a database row as an HTTP response or as an AuthZ resource.
+
+Field constraints must not contradict defaults. Pydantic v2: `model_validate`, `model_dump`, `ConfigDict`. No `.dict()`.
+
+`Principal`, `Action`, `Resource`, and `Decision` are fully typed.
+
+## HTTP
+
+Dependencies use `Annotated[T, Depends(...)]`. Load and validate in dependencies; chain them. Routes do not branch on role.
+
+Use `async def` for awaitable I/O. Do not block the event loop. Wrap sync clients with `run_in_threadpool`. Decode user JWTs with PyJWT against the project JWKS (`PyJWKClient`). Do not verify access tokens with the legacy HS256 JWT secret.
+
+Return payloads that `response_model` can validate. Do not construct that same model and return it (it would validate twice). Declare `status_code` and error responses on writes.
+
+Settings are `pydantic-settings`, env-prefixed `APP_`. Lint and format with Ruff.
+
+## REST
+
+Resources, not verbs:
+
+- `POST|GET /orgs/{org_id}/teams`
+- `DELETE /orgs/{org_id}/teams/{team_id}`
+- `POST|DELETE|PATCH /orgs/{org_id}/teams/{team_id}/members/{user_id}`
+- `POST|DELETE|PATCH /orgs/{org_id}/members/{user_id}`
+- `GET /orgs/{org_id}/members/{user_id}/teams`
+- `GET /users/{user_id}/orgs`
+- `GET|POST /orgs/{org_id}/workflows`
+- `PUT|DELETE /orgs/{org_id}/workflows/{workflow_id}`
+- `POST /orgs/{org_id}/workflows/{workflow_id}/execute`
+- `POST /orgs/{org_id}/workflows/{workflow_id}/execute-exported`
+
+Path params stay consistent where dependencies chain: `org_id`, `team_id`, `workflow_id`, `user_id`.
+
+`201` create, `200` PUT replace, `204` delete, `401` unauthenticated, `403` authenticated but denied, `404` unknown resource, `422` validation.
+
+## Persistence
+
+The FastAPI process talks to Postgres directly (privileged `postgres` role via the pooler, `BYPASSRLS`). The Data API is not the application path. RLS is a default-deny backstop on exposed tables; it does not decide actions. See the Row Level Security rule.
+
+## Runtime
+
+The API runs in Docker Compose with pinned base images. Secrets are runtime env, never baked into the image.
+
+## Errors
+
+Raise `Unauthenticated`, `AuthorizationError`, and `NotFound` in the engine or services. Map them to HTTP in one place. Routes do not `except Exception`. A deny includes a stable `reason`. Never convert a 403 into a 200. Never leak stack traces.
+
+## Tests
+
+Authorization is proven by method-level unit tests, not by clicking the API.
+
+Call `authorize()` with an in-memory store. Cover every `Action` against user, API key, and anonymous, both allow and deny: role implication, super-admin, org scope, export modes, API-key grants.
+
+A policy change that is not caught by the matrix is an incomplete change.
+
+One FastAPI `TestClient` smoke suite (happy path, 403, 401) may exist so HTTP wiring cannot silently break. It is not the AuthZ bar. README calls it smoke, not proof.
+
+```python
+@pytest.mark.parametrize("principal,action,resource,allowed", AUTHZ_MATRIX)
+def test_authorize_matrix(principal, action, resource, allowed):
+    decision = authorize(principal, action, resource, store=fake_store)
+    assert decision.allowed is allowed
+```

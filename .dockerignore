@@ -1,0 +1,7 @@
+.venv
+.git
+.cursor
+__pycache__
+.ruff_cache
+.env
+*.md

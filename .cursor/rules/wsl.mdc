@@ -1,0 +1,36 @@
+---
+description: Run all shell commands through WSL with Linux tools
+alwaysApply: true
+---
+
+# WSL on Windows
+
+On Windows, treat the shell as **WSL**. Do not run PowerShell, cmd, or Windows binaries for project work.
+
+## Commands
+
+Prefix every terminal command. `cd` to this repo’s Linux mount (`/mnt/<drive>/.../stackai-authz`), not `D:\...`.
+
+```bash
+wsl -e bash -lc 'cd /mnt/<drive>/.../stackai-authz && <command>'
+```
+
+## Tooling
+
+- Python, pip, venv, pytest, ruff: Linux (`python3`, `.venv/bin/python`)
+- Postgres client, Supabase CLI, curl, git extras: Linux packages or Linux binaries
+- Docker images: Linux (`python:3.13-slim`), not Windows containers
+- Do not download `*_windows_*` assets. Do not use `\.venv\Scripts\python.exe`
+
+## Examples
+
+```bash
+# ❌ BAD — Windows
+.\.venv\Scripts\python.exe -m pytest
+npx.cmd supabase init
+Invoke-WebRequest ... supabase_windows_amd64.zip
+
+# ✅ GOOD — WSL
+wsl -e bash -lc 'cd /mnt/<drive>/.../stackai-authz && .venv/bin/python -m pytest'
+wsl -e bash -lc 'cd /mnt/<drive>/.../stackai-authz && supabase migration new create_authz_tables'
+```

@@ -1,0 +1,10 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:80"
+    environment:
+      APP_SUPABASE_URL: ${APP_SUPABASE_URL:-}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:-}
+      APP_JWT_AUDIENCE: ${APP_JWT_AUDIENCE:-authenticated}
+      APP_DEBUG: "false"

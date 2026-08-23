@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AuthZ debug</title>
+  <style>
+    :root {
+      --bg: #12141a;
+      --panel: #1b1f28;
+      --line: #2c3340;
+      --text: #e7eaf0;
+      --muted: #8b93a7;
+      --accent: #e2b15c;
+      --ok: #6fbf73;
+      --bad: #e06c75;
+      --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.4 var(--sans);
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.85rem 1.1rem;
+      border-bottom: 1px solid var(--line);
+      background: #161922;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    header p { margin: 0; color: var(--muted); }
+    main {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 0.85rem;
+      padding: 0.85rem;
+      min-height: calc(100vh - 52px);
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.8rem;
+    }
+    h2 {
+      margin: 0 0 0.6rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+    }
+    label { display: block; color: var(--muted); margin: 0.35rem 0 0.15rem; }
+    select, input, textarea, button {
+      font: inherit;
+      color: var(--text);
+      background: #12151c;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+    }
+    select, input { width: 100%; padding: 0.35rem 0.45rem; }
+    .row { display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: end; }
+    .row > * { flex: 1; min-width: 8rem; }
+    button {
+      cursor: pointer;
+      padding: 0.4rem 0.65rem;
+      background: #2a2418;
+      border-color: #5a4a28;
+      color: var(--accent);
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+    button:hover { filter: brightness(1.12); }
+    button.danger { background: #2a1818; border-color: #5a2828; color: var(--bad); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.22rem 0.3rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 550; }
+    .id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .scroll { max-height: 14rem; overflow: auto; margin-bottom: 0.7rem; }
+    #log {
+      width: 100%;
+      min-height: 16rem;
+      height: 100%;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      padding: 0.5rem;
+      resize: vertical;
+    }
+    .span2 { grid-column: 1 / -1; }
+    .hint { color: var(--muted); margin: 0 0 0.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AuthZ debug</h1>
+    <p>Local tool. Impersonates with <code>X-Debug-User</code>. Membership writes hit the real API.</p>
+  </header>
+  <main>
+    <section>
+      <h2>Principal</h2>
+      <p class="hint">This is who the next real API call runs as. Catalog reads are privileged and ignore it.</p>
+      <label>Kind</label>
+      <select id="kind">
+        <option value="user">User (X-Debug-User)</option>
+        <option value="api">API key (X-Api-Key)</option>
+        <option value="anon">Anonymous</option>
+      </select>
+      <label>User</label>
+      <select id="user"></select>
+      <label>API key</label>
+      <select id="apiKey"></select>
+    </section>
+
+    <section>
+      <h2>Users</h2>
+      <p class="hint">Creates a row in <code>auth.users</code> so membership FKs work. No JWT minting — act as them via impersonation.</p>
+      <div class="row">
+        <div>
+          <label>Email</label>
+          <input id="newEmail" placeholder="tester@example.com" />
+        </div>
+        <button id="createUser" type="button">Create user</button>
+        <button id="deleteUser" class="danger" type="button">Delete selected</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Catalog</h2>
+      <div class="row">
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <h2>Orgs</h2>
+      <div class="scroll"><table id="orgs"></table></div>
+      <h2>Org members</h2>
+      <div class="scroll"><table id="orgMembers"></table></div>
+      <h2>Teams</h2>
+      <div class="scroll"><table id="teams"></table></div>
+      <h2>Team members</h2>
+      <div class="scroll"><table id="teamMembers"></table></div>
+      <h2>Workflows</h2>
+      <div class="scroll"><table id="workflows"></table></div>
+    </section>
+
+    <section>
+      <h2>Real API actions</h2>
+      <p class="hint">These go through <code>authorize()</code>. Use a super-admin user to mutate memberships.</p>
+      <div class="row">
+        <div>
+          <label>Org</label>
+          <select id="org"></select>
+        </div>
+        <div>
+          <label>Team</label>
+          <select id="team"></select>
+        </div>
+        <div>
+          <label>Target user</label>
+          <select id="target"></select>
+        </div>
+        <div>
+          <label>Workflow</label>
+          <select id="workflow"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Org role</label>
+          <select id="orgRole">
+            <option>member</option>
+            <option>super_admin</option>
+          </select>
+        </div>
+        <div>
+          <label>Team role</label>
+          <select id="teamRole">
+            <option>viewer</option>
+            <option>editor</option>
+            <option>admin</option>
+          </select>
+        </div>
+        <div>
+          <label>Team name</label>
+          <input id="teamName" value="Debug team" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:0.5rem">
+        <button data-probe="listTeams" type="button">GET teams</button>
+        <button data-probe="createTeam" type="button">Create team</button>
+        <button data-probe="addOrgMember" type="button">Add org member</button>
+        <button data-probe="patchOrgRole" type="button">PATCH org role</button>
+        <button data-probe="removeOrgMember" class="danger" type="button">Remove org member</button>
+        <button data-probe="addTeamMember" type="button">Add team member</button>
+        <button data-probe="patchTeamRole" type="button">PATCH team role</button>
+        <button data-probe="removeTeamMember" class="danger" type="button">Remove team member</button>
+        <button data-probe="listUserTeams" type="button">GET user teams</button>
+        <button data-probe="listUserOrgs" type="button">GET user orgs</button>
+        <button data-probe="listWorkflows" type="button">GET workflows</button>
+        <button data-probe="execute" type="button">Execute</button>
+        <button data-probe="exportPublic" type="button">Export (no auth)</button>
+        <button data-probe="exportPassword" type="button">Export + password</button>
+        <button data-probe="exportOrg" type="button">Export org-only</button>
+      </div>
+    </section>
+
+    <section class="span2">
+      <h2>Log</h2>
+      <div class="row">
+        <button id="clearLog" type="button">Clear</button>
+      </div>
+      <textarea id="log" readonly></textarea>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { catalog: null };
+
+    function log(line) {
+      const ts = new Date().toISOString().slice(11, 23);
+      $("log").value += `[${ts}] ${line}\n`;
+      $("log").scrollTop = $("log").scrollHeight;
+    }
+
+    function headersForKind(kind) {
+      const headers = { "Content-Type": "application/json" };
+      if (kind === "user") headers["X-Debug-User"] = $("user").value;
+      if (kind === "api") headers["X-Api-Key"] = $("apiKey").value;
+      return headers;
+    }
+
+    async function call(method, path, { body, kind, privileged } = {}) {
+      const init = { method, headers: privileged ? { "Content-Type": "application/json" } : headersForKind(kind || $("kind").value) };
+      if (body !== undefined) init.body = JSON.stringify(body);
+      log(`→ ${method} ${path} ${init.body || ""}`);
+      const response = await fetch(path, init);
+      const text = await response.text();
+      log(`← ${response.status} ${text}`);
+      return { response, text };
+    }
+
+    function fillSelect(select, rows, labelFn, valueFn) {
+      const current = select.value;
+      select.innerHTML = "";
+      for (const row of rows) {
+        const option = document.createElement("option");
+        option.value = valueFn(row);
+        option.textContent = labelFn(row);
+        select.appendChild(option);
+      }
+      if ([...select.options].some((option) => option.value === current)) select.value = current;
+    }
+
+    function table(el, headers, rows) {
+      el.innerHTML = `<thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>`;
+      const body = document.createElement("tbody");
+      for (const row of rows) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = row.map((cell, i) => `<td class="${i === 0 || String(cell).includes("-") ? "id" : ""}">${cell}</td>`).join("");
+        body.appendChild(tr);
+      }
+      el.appendChild(body);
+    }
+
+    async function refresh() {
+      const { response, text } = await call("GET", "/debug/state", { privileged: true });
+      if (!response.ok) return;
+      const data = JSON.parse(text);
+      state.catalog = data;
+      fillSelect($("user"), data.users, (u) => `${u.email || "(no email)"}  ${u.id.slice(0, 8)}`, (u) => u.id);
+      fillSelect($("target"), data.users, (u) => `${u.email || "(no email)"}  ${u.id.slice(0, 8)}`, (u) => u.id);
+      fillSelect($("apiKey"), data.api_keys, (k) => `${k.name}`, (k) => k.key);
+      fillSelect($("org"), data.orgs, (o) => o.name, (o) => o.id);
+      fillSelect($("team"), data.teams, (t) => `${t.name}${t.is_default ? " (default)" : ""}`, (t) => t.id);
+      fillSelect($("workflow"), data.workflows, (w) => `${w.name} [${w.visibility}]`, (w) => w.id);
+      table($("orgs"), ["id", "name"], data.orgs.map((o) => [o.id, o.name]));
+      table($("orgMembers"), ["org", "email", "role", "user"], data.org_members.map((m) => [m.org_name, m.email, m.role, m.user_id]));
+      table($("teams"), ["org", "team", "default", "id"], data.teams.map((t) => {
+        const org = data.orgs.find((o) => o.id === t.org_id);
+        return [org ? org.name : t.org_id, t.name, t.is_default, t.id];
+      }));
+      table($("teamMembers"), ["team", "email", "role", "user"], data.team_members.map((m) => [m.team_name, m.email, m.role, m.user_id]));
+      table($("workflows"), ["name", "visibility", "id"], data.workflows.map((w) => [w.name, w.visibility, w.id]));
+    }
+
+    const probes = {
+      listTeams: () => call("GET", `/orgs/${$("org").value}/teams`),
+      createTeam: () => call("POST", `/orgs/${$("org").value}/teams`, { body: { name: $("teamName").value } }),
+      addOrgMember: () => call("POST", `/orgs/${$("org").value}/members/${$("target").value}`, { body: { role: $("orgRole").value } }),
+      patchOrgRole: () => call("PATCH", `/orgs/${$("org").value}/members/${$("target").value}`, { body: { role: $("orgRole").value } }),
+      removeOrgMember: () => call("DELETE", `/orgs/${$("org").value}/members/${$("target").value}`),
+      addTeamMember: () => call("POST", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("target").value}`, { body: { role: $("teamRole").value } }),
+      patchTeamRole: () => call("PATCH", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("target").value}`, { body: { role: $("teamRole").value } }),
+      removeTeamMember: () => call("DELETE", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("target").value}`),
+      listUserTeams: () => call("GET", `/orgs/${$("org").value}/members/${$("target").value}/teams`),
+      listUserOrgs: () => call("GET", `/users/${$("target").value}/orgs`),
+      listWorkflows: () => call("GET", `/orgs/${$("org").value}/workflows`),
+      execute: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute`),
+      exportPublic: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute-exported`, { kind: "anon" }),
+      exportPassword: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute-exported`, {
+        kind: "anon",
+        body: { password: state.catalog.export_password },
+      }),
+      exportOrg: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute-exported`),
+    };
+
+    $("refresh").onclick = refresh;
+    $("clearLog").onclick = () => { $("log").value = ""; };
+    $("createUser").onclick = async () => {
+      await call("POST", "/debug/users", { privileged: true, body: { email: $("newEmail").value } });
+      await refresh();
+    };
+    $("deleteUser").onclick = async () => {
+      await call("DELETE", `/debug/users/${$("user").value}`, { privileged: true });
+      await refresh();
+    };
+    for (const button of document.querySelectorAll("[data-probe]")) {
+      button.onclick = async () => {
+        await probes[button.dataset.probe]();
+        if (!["listTeams", "listWorkflows", "listUserTeams", "listUserOrgs", "execute", "exportPublic", "exportPassword", "exportOrg"].includes(button.dataset.probe)) {
+          await refresh();
+        }
+      };
+    }
+
+    refresh().catch((err) => log(String(err)));
+  </script>
+</body>
+</html>
