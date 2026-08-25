@@ -8,6 +8,7 @@ from psycopg_pool import ConnectionPool
 from src.authz.models import OrgRole, TeamRole, Visibility
 from src.authz.store import (
     OrgMembershipRecord,
+    OrgRecord,
     TeamMembershipRecord,
     TeamRecord,
     WorkflowRecord,
@@ -36,6 +37,64 @@ class PostgresMembershipStore:
     def org_exists(self, org_id: UUID) -> bool:
         row = self._fetchone("select 1 from organizations where id = %s", (org_id,))
         return row is not None
+
+    def create_org(self, name: str, creator_user_id: UUID) -> OrgRecord:
+        with self._pool.connection() as conn, conn.transaction():
+            org_row = conn.execute(
+                """
+                insert into organizations (name)
+                values (%s)
+                returning id, name
+                """,
+                (name,),
+            ).fetchone()
+            if org_row is None:
+                raise NotFound
+            org_id = cast(UUID, org_row[0])
+            conn.execute(
+                """
+                insert into teams (org_id, name, is_default)
+                values (%s, 'Default', true)
+                """,
+                (org_id,),
+            )
+            try:
+                conn.execute(
+                    """
+                    insert into organization_members (org_id, user_id, role)
+                    values (%s, %s, %s)
+                    """,
+                    (org_id, creator_user_id, OrgRole.SUPER_ADMIN.value),
+                )
+            except ForeignKeyViolation as exc:
+                raise NotFound from exc
+        return OrgRecord(id=org_id, name=cast(str, org_row[1]))
+
+    def delete_org(self, org_id: UUID) -> None:
+        row = self._fetchone(
+            "delete from organizations where id = %s returning id", (org_id,)
+        )
+        if row is None:
+            raise NotFound
+
+    def org_member_count(self, org_id: UUID) -> int:
+        row = self._fetchone(
+            "select count(*) from organization_members where org_id = %s",
+            (org_id,),
+        )
+        return 0 if row is None else int(row[0])
+
+    def org_ids_for_user(self, user_id: UUID) -> list[UUID]:
+        rows = self._fetchall(
+            """
+            select org_id
+            from organization_members
+            where user_id = %s
+            order by org_id
+            """,
+            (user_id,),
+        )
+        return [cast(UUID, row[0]) for row in rows]
 
     def get_team(self, org_id: UUID, team_id: UUID) -> TeamRecord | None:
         row = self._fetchone(

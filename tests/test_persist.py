@@ -14,6 +14,7 @@ from src.seed import (
     EDITOR_A1,
     ORG_A,
     ORG_MEMBER,
+    OUTSIDER,
     SUPER_A,
     TARGET,
     TEAM_A1,
@@ -128,6 +129,49 @@ def test_list_own_orgs_includes_role():
     assert rows[0].role.value == "super_admin"
 
 
+def test_create_org_bootstraps_super_admin_and_default_team_admin():
+    store = membership_store()
+    org = orgs_service.create_org(store, "New Co", OUTSIDER)
+    assert store.org_exists(org.id)
+    assert store.org_role(OUTSIDER.user_id, org.id).value == "super_admin"
+    teams = store.list_teams(org.id)
+    assert len(teams) == 1
+    assert teams[0].is_default
+    assert store.team_role(OUTSIDER.user_id, teams[0].id).value == "admin"
+    listed = orgs_service.list_user_orgs(store, OUTSIDER.user_id)
+    assert any(row.org_id == org.id and row.role.value == "super_admin" for row in listed)
+
+
+def test_delete_sole_member_removes_org():
+    from src.authz.models import UserPrincipal
+    from src.debug import catalog as debug_catalog
+
+    store = membership_store()
+    creator = UserPrincipal(user_id=uuid4())
+    store.seed_user(creator.user_id, "solo@debug.local")
+    org = orgs_service.create_org(store, "Ephemeral", creator)
+    debug_catalog.delete_user(store, None, creator.user_id)
+    assert not store.org_exists(org.id)
+    assert creator.user_id not in store._users
+
+
+def test_delete_non_sole_member_keeps_org():
+    from src.authz.models import OrgRole, UserPrincipal
+    from src.debug import catalog as debug_catalog
+
+    store = membership_store()
+    creator = UserPrincipal(user_id=uuid4())
+    other = UserPrincipal(user_id=uuid4())
+    store.seed_user(creator.user_id, "owner@debug.local")
+    store.seed_user(other.user_id, "peer@debug.local")
+    org = orgs_service.create_org(store, "Shared", creator)
+    store.add_org_member(other.user_id, org.id, OrgRole.MEMBER)
+    debug_catalog.delete_user(store, None, creator.user_id)
+    assert store.org_exists(org.id)
+    assert store.org_role(other.user_id, org.id) is OrgRole.MEMBER
+    assert store.org_role(creator.user_id, org.id) is None
+
+
 def test_default_team_remove_denied_before_write():
     store = membership_store()
     with pytest.raises(AuthorizationError) as caught:
@@ -153,10 +197,43 @@ def _client() -> TestClient:
                 {
                     "super": SUPER_A.user_id,
                     "editor": EDITOR_A1.user_id,
+                    "outsider": OUTSIDER.user_id,
                 }
             ),
         )
     )
+
+
+def test_http_create_org_as_user():
+    client = _client()
+    created = client.post(
+        "/orgs",
+        headers={"Authorization": "Bearer outsider"},
+        json={"name": "Fresh Org"},
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["name"] == "Fresh Org"
+    org_id = body["id"]
+    listed = client.get(
+        f"/users/{OUTSIDER.user_id}/orgs",
+        headers={"Authorization": "Bearer outsider"},
+    )
+    assert listed.status_code == 200
+    assert any(row["org_id"] == org_id and row["role"] == "super_admin" for row in listed.json())
+    teams = client.get(
+        f"/orgs/{org_id}/teams",
+        headers={"Authorization": "Bearer outsider"},
+    )
+    assert teams.status_code == 200
+    assert any(row["is_default"] for row in teams.json())
+
+
+def test_http_create_org_anonymous_denied():
+    client = _client()
+    response = client.post("/orgs", json={"name": "Nope"})
+    assert response.status_code == 403
+    assert response.json()["reason"] == "anonymous_denied"
 
 
 def test_http_lists_reflect_team_create_and_delete():

@@ -40,8 +40,8 @@ Documented here so AuthZ is not invented per route:
 - **Anonymous** may only `execute-exported`, and only when visibility allows.
 - Every org has a **default team**. Every org member is on it. Org-shared workflows live there.
 - Users may belong to many orgs and many teams. `org_id` in the path is the active org.
-- There is no `POST /orgs`. Orgs are seeded.
-- **No self-service membership mutation.** A caller cannot add themselves, change their own membership roles, or leave a team/org. Only team admin (team memberships) or org super-admin (org memberships) mutate those rows. Cheaper than special-case self-leave.
+- **Self-serve org create.** Any authenticated user may `POST /orgs`. The creator becomes that org’s `super_admin` and an `admin` on the default team. Seeded orgs remain for demos. [D5](decisions.md), [D9](decisions.md), [D15](decisions.md).
+- **No self-service membership mutation** except the org-create bootstrap (D5). A caller cannot add themselves, change their own membership roles, or leave a team/org through the membership routes. Only team admin (team memberships) or org super-admin (org memberships) mutate those rows.
 - Listing memberships is not mutation: a user may list **their own** org memberships and **their own** team memberships; an org super-admin may list anyone’s **in-org** team memberships. Listing another user’s orgs is denied (would leak other-org memberships). There is no platform-wide admin.
 - API keys are **seeded** (no create-key HTTP route unless we add one later).
 - Execute is an AuthZ gate plus a canned/no-op body. There is no workflow runtime.
@@ -55,6 +55,7 @@ Invalid UUID → `422`. `401` unauthenticated, `403` authenticated but denied, `
 
 | Method | Path | Meaning |
 | --- | --- | --- |
+| `POST` | `/orgs` | Create an org (caller becomes org `super_admin` + default-team `admin`) |
 | `POST` | `/orgs/{org_id}/teams` | Create a team |
 | `GET` | `/orgs/{org_id}/teams` | Teams in the org the caller may see (browse; not the membership+role list) |
 | `DELETE` | `/orgs/{org_id}/teams/{team_id}` | Delete a team (not the default org team) |
@@ -194,6 +195,24 @@ Shipped:
 
 ---
 
+## Phase 7 — Self-serve org create (done)
+
+Minimal design: any authenticated **user** may create an org and becomes its first super-admin. No platform uber-admin. No slug, no name uniqueness beyond `id`, no profanity filter. API keys and anonymous cannot create orgs. [D15](decisions.md).
+
+Shipped:
+
+- `Action.ORG_CREATE` in the engine. Allow `UserPrincipal`; deny API key and anonymous. Matrix rows for allow and deny.
+- `POST /orgs` with body `{ "name": "..." }` → `201` + org payload (`id`, `name`).
+- Service path after allow: create org → default team → attach creator as org `super_admin` → creator is default-team `admin` (same semantics as the DB trigger). This bootstrap is the **only** self-assignment of membership; it is not `ORG_MEMBER_ADD` on self.
+- Org names: uniqueness on `id` only. Duplicate display names allowed.
+- **User delete** (debug catalog): for each org the user belonged to, if they were the **last org member**, delete that org (cascade). If other members remain, only their memberships are removed.
+- Quotas / rate limits: not implemented; noted in [decisions.md](decisions.md) Limits.
+- Audit: no audit table; noted in Limits (debug Event Log is local-only, not an audit trail).
+
+**Done when:** matrix covers `ORG_CREATE`; `POST /orgs` as a user returns `201` and the creator can list that org via `GET /users/{user_id}/orgs`; API key / anonymous denied; deleting the sole member of an org removes the org.
+
+---
+
 ## Vs the source prompt
 
 Covered: dummy REST for teams/org/workflows; AuthN via Supabase tokens; AuthZ as a reusable service; org/team hierarchy; default team; editor vs viewer vs external; extras (API key reduced privilege, password export, org-only export); free-tier Supabase; no signup; Docker; document edge cases.
@@ -218,4 +237,4 @@ Signup UI, frontend, email, local Supabase, Casbin/OPA, SAML, RLS as the permiss
 
 ## Completion
 
-Phases 0–5 done. Phase 6 README and cleanup done. Complete when both recordings exist and the phase 1 matrix still passes.
+Phases 0–5 done. Phase 6 README and cleanup done. Phase 7 self-serve org create done. Ship-complete when recordings exist and the authorize matrix still passes.

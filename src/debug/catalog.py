@@ -53,6 +53,12 @@ def delete_user(store: AppStore, pool: ConnectionPool | None, user_id: UUID) -> 
         raise NotFound
     if user_id not in store._users:
         raise NotFound
+    org_ids = store.org_ids_for_user(user_id)
+    for org_id in org_ids:
+        if store.org_member_count(org_id) == 1:
+            store.delete_org(org_id)
+        else:
+            store.remove_org_member(org_id, user_id)
     del store._users[user_id]
 
 
@@ -252,7 +258,7 @@ def _postgres_create_user(pool: ConnectionPool, email: str) -> dict[str, str]:
                 )
                 values (
                     gen_random_uuid(), %s,
-                    jsonb_build_object('sub', %s::text, 'email', %s),
+                    jsonb_build_object('sub', %s::text, 'email', %s::text),
                     'email', %s, now(), now(), now()
                 )
                 """,
@@ -264,9 +270,31 @@ def _postgres_create_user(pool: ConnectionPool, email: str) -> dict[str, str]:
 
 
 def _postgres_delete_user(pool: ConnectionPool, user_id: UUID) -> None:
-    with pool.connection() as conn:
+    with pool.connection() as conn, conn.transaction():
+        org_rows = conn.execute(
+            """
+            select org_id
+            from organization_members
+            where user_id = %s
+            """,
+            (user_id,),
+        ).fetchall()
+        org_ids = [row[0] for row in org_rows]
+        orphan_orgs: list[object] = []
+        for org_id in org_ids:
+            count_row = conn.execute(
+                """
+                select count(*) from organization_members where org_id = %s
+                """,
+                (org_id,),
+            ).fetchone()
+            count = 0 if count_row is None else int(count_row[0])
+            if count == 1:
+                orphan_orgs.append(org_id)
         row = conn.execute(
             "delete from auth.users where id = %s returning id", (user_id,)
         ).fetchone()
-    if row is None:
-        raise NotFound
+        if row is None:
+            raise NotFound
+        for org_id in orphan_orgs:
+            conn.execute("delete from organizations where id = %s", (org_id,))

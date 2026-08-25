@@ -9,8 +9,8 @@ from src.authz.store import AppStore
 from src.config import settings
 from src.debug.router import router as debug_router
 from src.http_errors import register_exception_handlers
+from src.orgs.router import orgs_root_router, user_orgs_router
 from src.orgs.router import router as orgs_router
-from src.orgs.router import user_orgs_router
 from src.seed import membership_store
 from src.teams.router import router as teams_router
 from src.workflows.router import router as workflows_router
@@ -62,6 +62,7 @@ def create_app(
     else:
         application.state.verifier = UnconfiguredVerifier()
     register_exception_handlers(application)
+    application.include_router(orgs_root_router)
     application.include_router(teams_router)
     application.include_router(orgs_router)
     application.include_router(user_orgs_router)

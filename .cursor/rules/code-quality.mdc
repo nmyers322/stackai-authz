@@ -68,6 +68,7 @@ Settings are `pydantic-settings`, env-prefixed `APP_`. Lint and format with Ruff
 
 Resources, not verbs:
 
+- `POST /orgs`
 - `POST|GET /orgs/{org_id}/teams`
 - `DELETE /orgs/{org_id}/teams/{team_id}`
 - `POST|DELETE|PATCH /orgs/{org_id}/teams/{team_id}/members/{user_id}`

@@ -89,6 +89,9 @@ def _user(
     resource: Resource,
     store: MembershipStore,
 ) -> Decision:
+    if action is Action.ORG_CREATE:
+        return _allow()
+
     if action is Action.USER_ORGS_LIST:
         if resource.user_id is None:
             return _deny(Reason.RESOURCE_INCOMPLETE)

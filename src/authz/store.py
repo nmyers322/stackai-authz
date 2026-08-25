@@ -4,6 +4,11 @@ from uuid import UUID
 from src.authz.models import FrozenModel, OrgRole, TeamRole, Visibility
 
 
+class OrgRecord(FrozenModel):
+    id: UUID
+    name: str
+
+
 class TeamRecord(FrozenModel):
     id: UUID
     org_id: UUID
@@ -41,6 +46,14 @@ class MembershipStore(Protocol):
 
 class AppStore(MembershipStore, Protocol):
     def org_exists(self, org_id: UUID) -> bool: ...
+
+    def create_org(self, name: str, creator_user_id: UUID) -> OrgRecord: ...
+
+    def delete_org(self, org_id: UUID) -> None: ...
+
+    def org_member_count(self, org_id: UUID) -> int: ...
+
+    def org_ids_for_user(self, user_id: UUID) -> list[UUID]: ...
 
     def get_team(self, org_id: UUID, team_id: UUID) -> TeamRecord | None: ...
 

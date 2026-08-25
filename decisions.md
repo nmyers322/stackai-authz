@@ -18,11 +18,13 @@ Ledger for this service. [`SPEC.md`](SPEC.md) is the plan and the phase record. 
 
 ### D4 — HTTP verbs match resource shape
 
-Workflow create is `POST`; replace is `PUT` (full body, including visibility); delete is `DELETE`. Membership role changes are `PATCH`. `GET /orgs/{org_id}/teams` is org browse. `GET /orgs/{org_id}/members/{user_id}/teams` is that user’s teams with team-membership role. `GET /users/{user_id}/orgs` is that user’s orgs with org-membership role (not nested under `org_id` — the caller does not have an active org yet).
+Workflow create is `POST`; replace is `PUT` (full body, including visibility); delete is `DELETE`. Membership role changes are `PATCH`. `GET /orgs/{org_id}/teams` is org browse. `GET /orgs/{org_id}/members/{user_id}/teams` is that user’s teams with team-membership role. `GET /users/{user_id}/orgs` is that user’s orgs with org-membership role (not nested under `org_id` — the caller does not have an active org yet). Org create is `POST /orgs` (no `{org_id}` yet).
 
-### D5 — No self-service membership mutation
+### D5 — No self-service membership mutation (one bootstrap exception)
 
-Callers cannot add themselves, change their own membership roles, or leave a team/org. Only team admin (team memberships) or org super-admin (org memberships) mutate those rows. Listing own memberships is allowed (D6). Cheaper than “self-leave except last super-admin.”
+Callers cannot add themselves, change their own membership roles, or leave a team/org through the membership routes (`ORG_MEMBER_*`, `TEAM_MEMBER_*`). Only team admin (team memberships) or org super-admin (org memberships) mutate those rows. Listing own memberships is allowed (D6). Cheaper than “self-leave except last super-admin.”
+
+**Exception:** `ORG_CREATE` may attach **exactly one** membership result for the creating user: org role `super_admin`, and default-team role `admin`. That write is part of create, not a self-`ORG_MEMBER_ADD`. Any further membership change still follows the rule above.
 
 ### D6 — Listing another user’s memberships is identity-match, not rank-only
 
@@ -39,13 +41,14 @@ Authorization is proven by a parametrized unit matrix over `authorize()` with an
 
 ### D9 — Platform
 
-pip + venv; CPython 3.13; FastAPI + Pydantic v2; `pydantic-settings`; Ruff; Docker `python:3.13-slim`; Compose service `api`; secrets as runtime env. Supabase **free cloud**, not a local stack. No signup; seed Auth users. No `POST /orgs`. API keys are seeded (no create-key route). Execute is AuthZ + no-op; no workflow runtime.
+pip + venv; CPython 3.13; FastAPI + Pydantic v2; `pydantic-settings`; Ruff; Docker `python:3.13-slim`; Compose service `api`; secrets as runtime env. Supabase **free cloud**, not a local stack. No signup UI; seed Auth users for demos. **Self-serve `POST /orgs`** for any authenticated user (phase 7 / D15); seeded orgs remain for demos. API keys are seeded (no create-key route). Execute is AuthZ + no-op; no workflow runtime.
 
 ### D10 — Deletes and default-team protection
 
 - `DELETE /orgs/{org_id}/teams/{team_id}` — org super-admin only. Deny if the team is the org’s default team. Cascade memberships and workflows on that team.
 - `DELETE .../teams/{team_id}/members/{user_id}` — denied on the default team (`default_team_immutable`). Remove the org membership instead.
 - `DELETE /orgs/{org_id}/workflows/{workflow_id}` — same grant as update: team editor+ or org super-admin. API keys cannot delete.
+- **User delete:** for each org the user belonged to, if they were the last org member, delete the org (cascade). Otherwise only their memberships are removed.
 
 ### D11 — Postgres client is psycopg 3
 
@@ -63,10 +66,21 @@ A non-empty `X-Api-Key` is looked up by SHA-256 hash and becomes `ApiKeyPrincipa
 
 Persistence stores PBKDF2-HMAC-SHA256 of the export password. `authorize()` only sees `Resource.export_password_ok`. Routes must not re-implement visibility rules.
 
+### D15 — Self-serve org create (minimal)
+
+**Locked** for phase 7.
+
+- Any authenticated **user** may `POST /orgs`. API key and anonymous deny.
+- Body: `{ "name": "..." }`. Uniqueness on org `id` only; duplicate names allowed. No URL slug. No profanity filter.
+- On success the creator is org `super_admin` and default-team `admin` (D5 bootstrap). After that, power is ordinary membership — no lasting “creator” privilege in `authorize()`.
+- No platform uber-admin in this design.
+
 ---
 
 ## Limits
 
-- No custom JWT TTL hook, signing-key rotation runbook, or audit table.
+- No custom JWT TTL hook, signing-key rotation runbook.
+- **No audit table.** Deny reasons and the debug UI Event Log are not an audit trail; production would want append-only action logs (who / action / resource / decision) separately.
 - No HTTP route to create API keys.
 - Create team is org super-admin only. Team admins manage memberships, not the team row.
+- **Org-create quotas:** not implemented. Any authenticated user may create unbounded orgs for now. A later hardening pass should add rate limiting and/or a max orgs per user (count of orgs they created, or where they are `super_admin`).

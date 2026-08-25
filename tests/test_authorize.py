@@ -30,6 +30,7 @@ ANON = AnonymousPrincipal()
 
 ORG_A_RES = Resource(org_id=ORG_A)
 ORG_B_RES = Resource(org_id=ORG_B)
+EMPTY_RES = Resource()
 TEAM_A1_RES = Resource(org_id=ORG_A, team_id=TEAM_A1)
 TEAM_DEFAULT_RES = Resource(org_id=ORG_A, team_id=TEAM_DEFAULT_A, is_default_team=True)
 TEAM_DEFAULT_TARGET = Resource(
@@ -71,6 +72,12 @@ def store():
 
 
 AUTHZ_MATRIX: list[tuple[object, Action, Resource, bool]] = [
+    # org.create
+    (ORG_MEMBER, Action.ORG_CREATE, EMPTY_RES, True),
+    (SUPER_A, Action.ORG_CREATE, EMPTY_RES, True),
+    (OUTSIDER, Action.ORG_CREATE, EMPTY_RES, True),
+    (KEY_A, Action.ORG_CREATE, EMPTY_RES, False),
+    (ANON, Action.ORG_CREATE, EMPTY_RES, False),
     # team.create
     (SUPER_A, Action.TEAM_CREATE, ORG_A_RES, True),
     (ORG_MEMBER, Action.TEAM_CREATE, ORG_A_RES, False),
@@ -241,6 +248,8 @@ def test_every_action_has_allow_and_deny():
         (ANON, Action.WORKFLOW_EXECUTE_EXPORTED, WF_TEAM, Reason.EXPORT_NOT_PERMITTED),
         (KEY_A, Action.WORKFLOW_EXECUTE_EXPORTED, WF_ORG, Reason.API_KEY_DENIED),
         (KEY_B, Action.WORKFLOW_LIST, ORG_A_RES, Reason.WRONG_ORG),
+        (ANON, Action.ORG_CREATE, EMPTY_RES, Reason.ANONYMOUS_DENIED),
+        (KEY_A, Action.ORG_CREATE, EMPTY_RES, Reason.API_KEY_DENIED),
     ],
 )
 def test_deny_reasons(principal, action, resource, reason, store):

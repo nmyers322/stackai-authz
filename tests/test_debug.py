@@ -34,6 +34,8 @@ def test_debug_impersonation_uses_x_debug_user():
     page = client.get("/debug")
     assert page.status_code == 200
     assert "AuthZ debug" in page.text
+    assert "Create org" in page.text
+    assert "Event Log" in page.text
     state = client.get("/debug/state")
     assert state.status_code == 200
     body = state.json()

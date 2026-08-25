@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 from src.authz.models import OrgRole, TeamRole, Visibility
 from src.authz.store import (
     OrgMembershipRecord,
+    OrgRecord,
     TeamMembershipRecord,
     TeamRecord,
     WorkflowRecord,
@@ -62,6 +63,51 @@ class InMemoryMembershipStore:
 
     def org_exists(self, org_id: UUID) -> bool:
         return org_id in self._org_names
+
+    def create_org(self, name: str, creator_user_id: UUID) -> OrgRecord:
+        org_id = uuid4()
+        self._org_names[org_id] = name
+        default = TeamRecord(
+            id=uuid4(), org_id=org_id, name="Default", is_default=True
+        )
+        self._teams[default.id] = default
+        self.add_org_member(creator_user_id, org_id, OrgRole.SUPER_ADMIN)
+        return OrgRecord(id=org_id, name=name)
+
+    def delete_org(self, org_id: UUID) -> None:
+        if org_id not in self._org_names:
+            raise NotFound
+        del self._org_names[org_id]
+        self._org = {
+            key: role for key, role in self._org.items() if key[1] != org_id
+        }
+        team_ids = {
+            team_id for team_id, team in self._teams.items() if team.org_id == org_id
+        }
+        self._teams = {
+            team_id: team
+            for team_id, team in self._teams.items()
+            if team.org_id != org_id
+        }
+        self._team = {
+            key: role for key, role in self._team.items() if key[1] not in team_ids
+        }
+        self._workflows = {
+            key: workflow
+            for key, workflow in self._workflows.items()
+            if workflow.org_id != org_id
+        }
+        self._api_keys = {
+            key: oid for key, oid in self._api_keys.items() if oid != org_id
+        }
+
+    def org_member_count(self, org_id: UUID) -> int:
+        return sum(1 for (_, member_org) in self._org if member_org == org_id)
+
+    def org_ids_for_user(self, user_id: UUID) -> list[UUID]:
+        return sorted(
+            org_id for (member_id, org_id) in self._org if member_id == user_id
+        )
 
     def get_team(self, org_id: UUID, team_id: UUID) -> TeamRecord | None:
         team = self._teams.get(team_id)

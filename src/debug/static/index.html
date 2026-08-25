@@ -6,83 +6,178 @@
   <title>AuthZ debug</title>
   <style>
     :root {
-      --bg: #12141a;
-      --panel: #1b1f28;
-      --line: #2c3340;
-      --text: #e7eaf0;
-      --muted: #8b93a7;
-      --accent: #e2b15c;
-      --ok: #6fbf73;
-      --bad: #e06c75;
+      --bg: #eef5f4;
+      --bg-accent: #e4eef8;
+      --panel: #fbfdfc;
+      --panel-2: #f3f8f7;
+      --line: #c9dcd6;
+      --text: #2a3b44;
+      --muted: #6b818c;
+      --green: #7eb8a2;
+      --green-deep: #4f8f7c;
+      --blue: #8eb6d9;
+      --blue-deep: #4f7fa8;
+      --ok: #4f8f7c;
+      --bad: #c46b6b;
+      --in: #4f7fa8;
+      --out: #4f8f7c;
       --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
       --sans: "Segoe UI", system-ui, sans-serif;
+      --nav: 13.5rem;
     }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      background: var(--bg);
+      background:
+        radial-gradient(1200px 500px at 0% 0%, var(--bg-accent), transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, #e6f4ee, transparent 50%),
+        var(--bg);
       color: var(--text);
-      font: 13px/1.4 var(--sans);
+      font: 13px/1.45 var(--sans);
     }
     header {
       display: flex;
       align-items: baseline;
       gap: 1rem;
-      padding: 0.85rem 1.1rem;
+      padding: 0.75rem 1rem;
       border-bottom: 1px solid var(--line);
-      background: #161922;
+      background: color-mix(in srgb, var(--panel) 88%, white);
     }
     header h1 {
       margin: 0;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       font-weight: 650;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+      color: var(--green-deep);
     }
     header p { margin: 0; color: var(--muted); }
-    main {
+    .shell {
       display: grid;
-      grid-template-columns: 1.15fr 1fr;
-      grid-template-rows: auto 1fr;
-      gap: 0.85rem;
-      padding: 0.85rem;
-      min-height: calc(100vh - 52px);
+      grid-template-columns: var(--nav) minmax(0, 1fr) 45%;
+      height: calc(100vh - 48px);
     }
-    section {
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      padding: 0.85rem 0.7rem;
+      border-right: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel-2) 80%, white);
+    }
+    .nav-item {
+      width: 100%;
+      text-align: left;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+    .nav-item:hover { background: #e7f2ee; }
+    .nav-item.active {
+      background: #dff0ea;
+      border-color: #b7d8cc;
+      color: var(--green-deep);
+      font-weight: 600;
+    }
+    .workspace {
+      overflow: auto;
+      padding: 0.9rem;
+    }
+    .card {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 0.8rem;
+      border-radius: 12px;
+      padding: 1rem 1.05rem 1.1rem;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
     }
+    .view { display: none; }
+    .view.active { display: block; }
     h2 {
-      margin: 0 0 0.6rem;
-      font-size: 0.72rem;
+      margin: 0 0 0.45rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--blue-deep);
+    }
+    h3 {
+      margin: 0 0 0.45rem;
+      font-size: 0.68rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: var(--accent);
+      color: var(--green-deep);
     }
-    label { display: block; color: var(--muted); margin: 0.35rem 0 0.15rem; }
-    select, input, textarea, button {
+    .block + .block {
+      margin-top: 1.05rem;
+      padding-top: 0.95rem;
+      border-top: 1px dashed var(--line);
+    }
+    .hint { color: var(--muted); margin: 0 0 0.7rem; }
+    label { display: block; color: var(--muted); margin: 0 0 0.2rem; font-size: 12px; }
+    select, input, button {
       font: inherit;
       color: var(--text);
-      background: #12151c;
+      background: #fff;
       border: 1px solid var(--line);
-      border-radius: 5px;
+      border-radius: 7px;
     }
-    select, input { width: 100%; padding: 0.35rem 0.45rem; }
-    .row { display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: end; }
-    .row > * { flex: 1; min-width: 8rem; }
+    select, input { width: 100%; padding: 0.38rem 0.5rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+      gap: 0.55rem 0.7rem;
+    }
+    .actions { display: flex; flex-direction: column; gap: 0.85rem; }
+    .action-group {
+      background: var(--panel-2);
+      border: 1px solid color-mix(in srgb, var(--line) 80%, white);
+      border-radius: 9px;
+      padding: 0.65rem 0.7rem 0.7rem;
+    }
+    .action-group .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
     button {
       cursor: pointer;
-      padding: 0.4rem 0.65rem;
-      background: #2a2418;
-      border-color: #5a4a28;
-      color: var(--accent);
+      padding: 0.42rem 0.72rem;
+      background: #e8f3ee;
+      border-color: #b7d8cc;
+      color: var(--green-deep);
       white-space: nowrap;
+    }
+    button:hover { filter: brightness(0.98); background: #dceee6; }
+    button.blue {
+      background: #e7f0f8;
+      border-color: #c2d6ea;
+      color: var(--blue-deep);
+    }
+    button.blue:hover { background: #dbe8f4; }
+    button.danger {
+      background: #f8ecec;
+      border-color: #e3c4c4;
+      color: var(--bad);
+    }
+    button.tool {
+      padding: 0.22rem 0.55rem;
+      font-size: 12px;
       flex: 0 0 auto;
     }
-    button:hover { filter: brightness(1.12); }
-    button.danger { background: #2a1818; border-color: #5a2828; color: var(--bad); }
+    .heading-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      margin-bottom: 0.55rem;
+    }
+    .heading-row h2, .heading-row h3 { margin: 0; }
+    .form-row { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; }
+    .form-row .grow { flex: 1; min-width: 12rem; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -90,24 +185,72 @@
     }
     th, td {
       text-align: left;
-      padding: 0.22rem 0.3rem;
+      padding: 0.28rem 0.35rem;
       border-bottom: 1px solid var(--line);
       vertical-align: top;
     }
     th { color: var(--muted); font-weight: 550; }
     .id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-    .scroll { max-height: 14rem; overflow: auto; margin-bottom: 0.7rem; }
-    #log {
-      width: 100%;
-      min-height: 16rem;
+    .scroll {
+      max-height: 13rem;
+      overflow: auto;
+      margin-bottom: 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .log-panel {
+      position: sticky;
+      top: 0;
       height: 100%;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--line);
+      background: #f7fbfd;
+      min-height: 0;
+    }
+    .log-panel header.log-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.7rem 0.8rem 0.55rem;
+      border-bottom: 1px solid var(--line);
+      background: #eef6fb;
+    }
+    .log-panel header.log-head h2 {
+      margin: 0;
+      color: var(--blue-deep);
+    }
+    #log {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 0.7rem 0.8rem 1rem;
       font-family: var(--mono);
       font-size: 11.5px;
-      padding: 0.5rem;
-      resize: vertical;
+      line-height: 1.45;
     }
-    .span2 { grid-column: 1 / -1; }
-    .hint { color: var(--muted); margin: 0 0 0.5rem; }
+    .log-entry {
+      margin: 0 0 0.9em;
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      background: #fff;
+      border: 1px solid #dce8ef;
+    }
+    .log-entry .log-ts {
+      display: block;
+      color: #8aa0ad;
+      font-size: 10.5px;
+      margin-bottom: 0.2rem;
+    }
+    .log-entry.out { border-left: 3px solid var(--out); }
+    .log-entry.in { border-left: 3px solid var(--in); }
+    .log-entry.out .log-body { color: var(--out); }
+    .log-entry.in .log-body { color: var(--in); }
+    .log-entry.err { border-left: 3px solid var(--bad); }
+    .log-entry.err .log-body { color: var(--bad); }
+    .log-body { white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -115,128 +258,228 @@
     <h1>AuthZ debug</h1>
     <p>Local tool. Impersonates with <code>X-Debug-User</code>. Membership writes hit the real API.</p>
   </header>
-  <main>
-    <section>
-      <h2>Principal</h2>
-      <p class="hint">This is who the next real API call runs as. Catalog reads are privileged and ignore it.</p>
-      <label>Kind</label>
-      <select id="kind">
-        <option value="user">User (X-Debug-User)</option>
-        <option value="api">API key (X-Api-Key)</option>
-        <option value="anon">Anonymous</option>
-      </select>
-      <label>User</label>
-      <select id="user"></select>
-      <label>API key</label>
-      <select id="apiKey"></select>
-    </section>
+  <div class="shell">
+    <nav class="nav" aria-label="Debug sections">
+      <button type="button" class="nav-item active" data-view="api">Send API calls</button>
+      <button type="button" class="nav-item" data-view="catalog">Data catalog</button>
+      <button type="button" class="nav-item" data-view="users">User management</button>
+    </nav>
 
-    <section>
-      <h2>Users</h2>
-      <p class="hint">Creates a row in <code>auth.users</code> so membership FKs work. No JWT minting — act as them via impersonation.</p>
-      <div class="row">
-        <div>
-          <label>Email</label>
-          <input id="newEmail" placeholder="tester@example.com" />
+    <div class="workspace">
+      <section id="view-api" class="view active">
+        <div class="card">
+          <div class="block">
+            <h2>Principal</h2>
+            <p class="hint">This is who the next real API call runs as. Catalog reads are privileged and ignore it.</p>
+            <div class="grid">
+              <div>
+                <label>Kind</label>
+                <select id="kind">
+                  <option value="user">User (X-Debug-User)</option>
+                  <option value="api">API key (X-Api-Key)</option>
+                  <option value="anon">Anonymous</option>
+                </select>
+              </div>
+              <div>
+                <label>User</label>
+                <select id="user"></select>
+              </div>
+              <div>
+                <label>API key</label>
+                <select id="apiKey"></select>
+              </div>
+            </div>
+          </div>
+          <div class="block">
+            <h2>Real API actions</h2>
+            <p class="hint">These go through <code>authorize()</code>. Any user may create an org (becomes super-admin). Use a super-admin to mutate memberships. Browse “user teams / orgs” uses the Principal user.</p>
+            <div class="actions">
+              <div class="action-group">
+                <h3>Organizations</h3>
+                <div class="form-row">
+                  <div class="grow">
+                    <label>Org name</label>
+                    <input id="orgName" placeholder="Acme Labs" value="My org" />
+                  </div>
+                  <button data-probe="createOrg" type="button">Create org</button>
+                </div>
+                <div style="margin-top:0.55rem">
+                  <label>Org</label>
+                  <select id="org"></select>
+                </div>
+              </div>
+              <div class="action-group">
+                <h3>Browse</h3>
+                <div class="buttons">
+                  <button class="blue" data-probe="listTeams" type="button">GET teams</button>
+                  <button class="blue" data-probe="listUserTeams" type="button">GET user teams</button>
+                  <button class="blue" data-probe="listUserOrgs" type="button">GET user orgs</button>
+                  <button class="blue" data-probe="listWorkflows" type="button">GET workflows</button>
+                </div>
+              </div>
+              <div class="action-group">
+                <h3>Teams</h3>
+                <div class="form-row">
+                  <div class="grow">
+                    <label>Team name</label>
+                    <input id="teamName" placeholder="Engineering" value="Debug team" />
+                  </div>
+                  <button data-probe="createTeam" type="button">Create team</button>
+                </div>
+              </div>
+              <div class="action-group">
+                <h3>Org membership</h3>
+                <div class="form-row">
+                  <div class="grow">
+                    <label>User to add</label>
+                    <select id="orgAddUser"></select>
+                  </div>
+                  <button data-probe="addOrgMember" type="button">Add org member</button>
+                </div>
+                <div class="form-row" style="margin-top:0.55rem">
+                  <div class="grow">
+                    <label>Org member</label>
+                    <select id="orgMemberUser"></select>
+                  </div>
+                  <button data-probe="removeOrgMember" class="danger" type="button">Remove org member</button>
+                </div>
+                <div class="form-row" style="margin-top:0.55rem">
+                  <div class="grow">
+                    <label>Org role</label>
+                    <select id="orgRole">
+                      <option>member</option>
+                      <option>super_admin</option>
+                    </select>
+                  </div>
+                  <button data-probe="patchOrgRole" type="button">Update org role</button>
+                </div>
+              </div>
+              <div class="action-group">
+                <h3>Team membership</h3>
+                <div style="margin-bottom:0.55rem">
+                  <label>Team</label>
+                  <select id="team"></select>
+                </div>
+                <div class="form-row">
+                  <div class="grow">
+                    <label>User to add</label>
+                    <select id="teamAddUser"></select>
+                  </div>
+                  <button data-probe="addTeamMember" type="button">Add team member</button>
+                </div>
+                <div class="form-row" style="margin-top:0.55rem">
+                  <div class="grow">
+                    <label>Team member</label>
+                    <select id="teamMemberUser"></select>
+                  </div>
+                  <button data-probe="removeTeamMember" class="danger" type="button">Remove team member</button>
+                </div>
+                <div class="form-row" style="margin-top:0.55rem">
+                  <div class="grow">
+                    <label>Team role</label>
+                    <select id="teamRole">
+                      <option>viewer</option>
+                      <option>editor</option>
+                      <option>admin</option>
+                    </select>
+                  </div>
+                  <button data-probe="patchTeamRole" type="button">Update team role</button>
+                </div>
+              </div>
+              <div class="action-group">
+                <h3>Execute</h3>
+                <div style="margin-bottom:0.55rem">
+                  <label>Workflow</label>
+                  <select id="workflow"></select>
+                </div>
+                <div class="buttons">
+                  <button data-probe="execute" type="button">Execute</button>
+                  <button class="blue" data-probe="exportPublic" type="button">Export (no auth)</button>
+                  <button class="blue" data-probe="exportPassword" type="button">Export + password</button>
+                  <button class="blue" data-probe="exportOrg" type="button">Export org-only</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <button id="createUser" type="button">Create user</button>
-        <button id="deleteUser" class="danger" type="button">Delete selected</button>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <h2>Catalog</h2>
-      <div class="row">
-        <button id="refresh" type="button">Refresh</button>
-      </div>
-      <h2>Orgs</h2>
-      <div class="scroll"><table id="orgs"></table></div>
-      <h2>Org members</h2>
-      <div class="scroll"><table id="orgMembers"></table></div>
-      <h2>Teams</h2>
-      <div class="scroll"><table id="teams"></table></div>
-      <h2>Team members</h2>
-      <div class="scroll"><table id="teamMembers"></table></div>
-      <h2>Workflows</h2>
-      <div class="scroll"><table id="workflows"></table></div>
-    </section>
+      <section id="view-catalog" class="view">
+        <div class="card">
+          <div class="heading-row">
+            <h2>Data catalog</h2>
+            <button id="refresh" class="tool blue" type="button">Refresh</button>
+          </div>
+          <p class="hint">Privileged snapshot of orgs, memberships, and workflows.</p>
+          <h3>Orgs</h3>
+          <div class="scroll"><table id="orgs"></table></div>
+          <h3>Org members</h3>
+          <div class="scroll"><table id="orgMembers"></table></div>
+          <h3>Teams</h3>
+          <div class="scroll"><table id="teams"></table></div>
+          <h3>Team members</h3>
+          <div class="scroll"><table id="teamMembers"></table></div>
+          <h3>Workflows</h3>
+          <div class="scroll"><table id="workflows"></table></div>
+        </div>
+      </section>
 
-    <section>
-      <h2>Real API actions</h2>
-      <p class="hint">These go through <code>authorize()</code>. Use a super-admin user to mutate memberships.</p>
-      <div class="row">
-        <div>
-          <label>Org</label>
-          <select id="org"></select>
+      <section id="view-users" class="view">
+        <div class="card">
+          <h2>User management</h2>
+          <p class="hint">Creates a row in <code>auth.users</code> so membership FKs work. No JWT minting — act as them via impersonation.</p>
+          <div class="form-row">
+            <div class="grow">
+              <label>Email</label>
+              <input id="newEmail" placeholder="tester@example.com" />
+            </div>
+            <button id="createUser" type="button">Create user</button>
+          </div>
+          <div class="form-row" style="margin-top:0.85rem">
+            <div class="grow">
+              <label>Existing user</label>
+              <select id="manageUser"></select>
+            </div>
+            <button id="deleteUser" class="danger" type="button">Delete selected</button>
+          </div>
         </div>
-        <div>
-          <label>Team</label>
-          <select id="team"></select>
-        </div>
-        <div>
-          <label>Target user</label>
-          <select id="target"></select>
-        </div>
-        <div>
-          <label>Workflow</label>
-          <select id="workflow"></select>
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Org role</label>
-          <select id="orgRole">
-            <option>member</option>
-            <option>super_admin</option>
-          </select>
-        </div>
-        <div>
-          <label>Team role</label>
-          <select id="teamRole">
-            <option>viewer</option>
-            <option>editor</option>
-            <option>admin</option>
-          </select>
-        </div>
-        <div>
-          <label>Team name</label>
-          <input id="teamName" value="Debug team" />
-        </div>
-      </div>
-      <div class="row" style="margin-top:0.5rem">
-        <button data-probe="listTeams" type="button">GET teams</button>
-        <button data-probe="createTeam" type="button">Create team</button>
-        <button data-probe="addOrgMember" type="button">Add org member</button>
-        <button data-probe="patchOrgRole" type="button">PATCH org role</button>
-        <button data-probe="removeOrgMember" class="danger" type="button">Remove org member</button>
-        <button data-probe="addTeamMember" type="button">Add team member</button>
-        <button data-probe="patchTeamRole" type="button">PATCH team role</button>
-        <button data-probe="removeTeamMember" class="danger" type="button">Remove team member</button>
-        <button data-probe="listUserTeams" type="button">GET user teams</button>
-        <button data-probe="listUserOrgs" type="button">GET user orgs</button>
-        <button data-probe="listWorkflows" type="button">GET workflows</button>
-        <button data-probe="execute" type="button">Execute</button>
-        <button data-probe="exportPublic" type="button">Export (no auth)</button>
-        <button data-probe="exportPassword" type="button">Export + password</button>
-        <button data-probe="exportOrg" type="button">Export org-only</button>
-      </div>
-    </section>
+      </section>
+    </div>
 
-    <section class="span2">
-      <h2>Log</h2>
-      <div class="row">
-        <button id="clearLog" type="button">Clear</button>
-      </div>
-      <textarea id="log" readonly></textarea>
-    </section>
-  </main>
+    <aside class="log-panel">
+      <header class="log-head">
+        <h2>Event Log</h2>
+        <button id="clearLog" class="tool" type="button">Clear</button>
+      </header>
+      <div id="log" aria-live="polite"></div>
+    </aside>
+  </div>
   <script>
     const $ = (id) => document.getElementById(id);
     const state = { catalog: null };
 
-    function log(line) {
+    function prettyJson(value) {
+      if (value === undefined || value === null || value === "") return "";
+      if (typeof value === "object") return JSON.stringify(value, null, 2);
+      try {
+        return JSON.stringify(JSON.parse(value), null, 2);
+      } catch {
+        return String(value);
+      }
+    }
+
+    function log(line, kind) {
       const ts = new Date().toISOString().slice(11, 23);
-      $("log").value += `[${ts}] ${line}\n`;
+      const entry = document.createElement("div");
+      entry.className = `log-entry ${kind || ""}`;
+      const time = document.createElement("span");
+      time.className = "log-ts";
+      time.textContent = ts;
+      const body = document.createElement("span");
+      body.className = "log-body";
+      body.textContent = line;
+      entry.append(time, body);
+      $("log").appendChild(entry);
       $("log").scrollTop = $("log").scrollHeight;
     }
 
@@ -250,10 +493,13 @@
     async function call(method, path, { body, kind, privileged } = {}) {
       const init = { method, headers: privileged ? { "Content-Type": "application/json" } : headersForKind(kind || $("kind").value) };
       if (body !== undefined) init.body = JSON.stringify(body);
-      log(`→ ${method} ${path} ${init.body || ""}`);
+      const outPayload = prettyJson(body);
+      log(outPayload ? `→ ${method} ${path}\n${outPayload}` : `→ ${method} ${path}`, "out");
       const response = await fetch(path, init);
       const text = await response.text();
-      log(`← ${response.status} ${text}`);
+      const dir = response.ok ? "in" : "err";
+      const inPayload = prettyJson(text);
+      log(inPayload ? `← ${response.status}\n${inPayload}` : `← ${response.status}`, dir);
       return { response, text };
     }
 
@@ -280,17 +526,66 @@
       el.appendChild(body);
     }
 
+    function userLabel(user) {
+      return `${user.email || "(no email)"}  ${user.id.slice(0, 8)}`;
+    }
+
+    function usersById(data) {
+      return Object.fromEntries(data.users.map((user) => [user.id, user]));
+    }
+
+    function fillTeamMembers() {
+      const data = state.catalog;
+      if (!data) return;
+      const teamId = $("team").value;
+      const byId = usersById(data);
+      const members = data.team_members
+        .filter((member) => member.team_id === teamId)
+        .map((member) => byId[member.user_id] || { id: member.user_id, email: member.email })
+        .sort((a, b) => userLabel(a).localeCompare(userLabel(b)));
+      fillSelect($("teamMemberUser"), members, userLabel, (user) => user.id);
+    }
+
+    function fillOrgScopedSelects() {
+      const data = state.catalog;
+      if (!data) return;
+      const orgId = $("org").value;
+      const memberIds = new Set(
+        data.org_members
+          .filter((member) => member.org_id === orgId)
+          .map((member) => member.user_id),
+      );
+      const orgMembers = data.users
+        .filter((user) => memberIds.has(user.id))
+        .sort((a, b) => userLabel(a).localeCompare(userLabel(b)));
+      fillSelect($("orgAddUser"), data.users, userLabel, (user) => user.id);
+      fillSelect($("orgMemberUser"), orgMembers, userLabel, (user) => user.id);
+      fillSelect($("teamAddUser"), data.users, userLabel, (user) => user.id);
+      fillSelect(
+        $("team"),
+        data.teams.filter((team) => team.org_id === orgId),
+        (team) => `${team.name}${team.is_default ? " (default)" : ""}`,
+        (team) => team.id,
+      );
+      fillTeamMembers();
+      fillSelect(
+        $("workflow"),
+        data.workflows.filter((workflow) => workflow.org_id === orgId),
+        (workflow) => `${workflow.name} [${workflow.visibility}]`,
+        (workflow) => workflow.id,
+      );
+    }
+
     async function refresh() {
       const { response, text } = await call("GET", "/debug/state", { privileged: true });
       if (!response.ok) return;
       const data = JSON.parse(text);
       state.catalog = data;
-      fillSelect($("user"), data.users, (u) => `${u.email || "(no email)"}  ${u.id.slice(0, 8)}`, (u) => u.id);
-      fillSelect($("target"), data.users, (u) => `${u.email || "(no email)"}  ${u.id.slice(0, 8)}`, (u) => u.id);
+      fillSelect($("user"), data.users, userLabel, (u) => u.id);
+      fillSelect($("manageUser"), data.users, userLabel, (u) => u.id);
       fillSelect($("apiKey"), data.api_keys, (k) => `${k.name}`, (k) => k.key);
       fillSelect($("org"), data.orgs, (o) => o.name, (o) => o.id);
-      fillSelect($("team"), data.teams, (t) => `${t.name}${t.is_default ? " (default)" : ""}`, (t) => t.id);
-      fillSelect($("workflow"), data.workflows, (w) => `${w.name} [${w.visibility}]`, (w) => w.id);
+      fillOrgScopedSelects();
       table($("orgs"), ["id", "name"], data.orgs.map((o) => [o.id, o.name]));
       table($("orgMembers"), ["org", "email", "role", "user"], data.org_members.map((m) => [m.org_name, m.email, m.role, m.user_id]));
       table($("teams"), ["org", "team", "default", "id"], data.teams.map((t) => {
@@ -302,16 +597,17 @@
     }
 
     const probes = {
+      createOrg: () => call("POST", "/orgs", { body: { name: $("orgName").value } }),
       listTeams: () => call("GET", `/orgs/${$("org").value}/teams`),
       createTeam: () => call("POST", `/orgs/${$("org").value}/teams`, { body: { name: $("teamName").value } }),
-      addOrgMember: () => call("POST", `/orgs/${$("org").value}/members/${$("target").value}`, { body: { role: $("orgRole").value } }),
-      patchOrgRole: () => call("PATCH", `/orgs/${$("org").value}/members/${$("target").value}`, { body: { role: $("orgRole").value } }),
-      removeOrgMember: () => call("DELETE", `/orgs/${$("org").value}/members/${$("target").value}`),
-      addTeamMember: () => call("POST", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("target").value}`, { body: { role: $("teamRole").value } }),
-      patchTeamRole: () => call("PATCH", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("target").value}`, { body: { role: $("teamRole").value } }),
-      removeTeamMember: () => call("DELETE", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("target").value}`),
-      listUserTeams: () => call("GET", `/orgs/${$("org").value}/members/${$("target").value}/teams`),
-      listUserOrgs: () => call("GET", `/users/${$("target").value}/orgs`),
+      addOrgMember: () => call("POST", `/orgs/${$("org").value}/members/${$("orgAddUser").value}`, { body: { role: $("orgRole").value } }),
+      patchOrgRole: () => call("PATCH", `/orgs/${$("org").value}/members/${$("orgMemberUser").value}`, { body: { role: $("orgRole").value } }),
+      removeOrgMember: () => call("DELETE", `/orgs/${$("org").value}/members/${$("orgMemberUser").value}`),
+      addTeamMember: () => call("POST", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("teamAddUser").value}`, { body: { role: $("teamRole").value } }),
+      patchTeamRole: () => call("PATCH", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("teamMemberUser").value}`, { body: { role: $("teamRole").value } }),
+      removeTeamMember: () => call("DELETE", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("teamMemberUser").value}`),
+      listUserTeams: () => call("GET", `/orgs/${$("org").value}/members/${$("user").value}/teams`),
+      listUserOrgs: () => call("GET", `/users/${$("user").value}/orgs`),
       listWorkflows: () => call("GET", `/orgs/${$("org").value}/workflows`),
       execute: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute`),
       exportPublic: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute-exported`, { kind: "anon" }),
@@ -322,26 +618,45 @@
       exportOrg: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute-exported`),
     };
 
+    for (const button of document.querySelectorAll(".nav-item")) {
+      button.onclick = () => {
+        for (const item of document.querySelectorAll(".nav-item")) item.classList.remove("active");
+        for (const view of document.querySelectorAll(".view")) view.classList.remove("active");
+        button.classList.add("active");
+        $(`view-${button.dataset.view}`).classList.add("active");
+      };
+    }
+
     $("refresh").onclick = refresh;
-    $("clearLog").onclick = () => { $("log").value = ""; };
+    $("org").onchange = fillOrgScopedSelects;
+    $("team").onchange = fillTeamMembers;
+    $("clearLog").onclick = () => { $("log").innerHTML = ""; };
     $("createUser").onclick = async () => {
       await call("POST", "/debug/users", { privileged: true, body: { email: $("newEmail").value } });
       await refresh();
     };
     $("deleteUser").onclick = async () => {
-      await call("DELETE", `/debug/users/${$("user").value}`, { privileged: true });
+      await call("DELETE", `/debug/users/${$("manageUser").value}`, { privileged: true });
       await refresh();
     };
     for (const button of document.querySelectorAll("[data-probe]")) {
       button.onclick = async () => {
-        await probes[button.dataset.probe]();
+        const result = await probes[button.dataset.probe]();
         if (!["listTeams", "listWorkflows", "listUserTeams", "listUserOrgs", "execute", "exportPublic", "exportPassword", "exportOrg"].includes(button.dataset.probe)) {
           await refresh();
+          if (button.dataset.probe === "createOrg" && result.response.ok) {
+            try {
+              $("org").value = JSON.parse(result.text).id;
+              fillOrgScopedSelects();
+            } catch {
+              /* keep prior selection */
+            }
+          }
         }
       };
     }
 
-    refresh().catch((err) => log(String(err)));
+    refresh().catch((err) => log(String(err), "err"));
   </script>
 </body>
 </html>

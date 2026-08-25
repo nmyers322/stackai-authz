@@ -1,7 +1,16 @@
 from uuid import UUID
 
-from src.authz.models import OrgRole
-from src.authz.store import AppStore, OrgMembershipRecord, TeamMembershipRecord
+from src.authz.models import OrgRole, UserPrincipal
+from src.authz.store import (
+    AppStore,
+    OrgMembershipRecord,
+    OrgRecord,
+    TeamMembershipRecord,
+)
+
+
+def create_org(store: AppStore, name: str, creator: UserPrincipal) -> OrgRecord:
+    return store.create_org(name, creator.user_id)
 
 
 def add_member(

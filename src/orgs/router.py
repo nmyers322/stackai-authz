@@ -4,12 +4,40 @@ from fastapi import APIRouter, status
 from starlette.concurrency import run_in_threadpool
 
 from src.authn.dependencies import PrincipalDep, StoreDep, require_http
-from src.authz.models import Action, OrgRole, Resource
+from src.authz.exceptions import AuthorizationError
+from src.authz.models import Action, OrgRole, Reason, Resource, UserPrincipal
 from src.orgs import service as orgs_service
-from src.orgs.schemas import OrgMemberOut, OrgMemberWrite, UserOrgOut, UserTeamOut
+from src.orgs.schemas import (
+    OrgCreate,
+    OrgMemberOut,
+    OrgMemberWrite,
+    OrgOut,
+    UserOrgOut,
+    UserTeamOut,
+)
 
 router = APIRouter(prefix="/orgs/{org_id}/members", tags=["org-members"])
+orgs_root_router = APIRouter(prefix="/orgs", tags=["orgs"])
 user_orgs_router = APIRouter(prefix="/users/{user_id}/orgs", tags=["user-orgs"])
+
+
+@orgs_root_router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=OrgOut,
+)
+async def create_org(
+    body: OrgCreate,
+    principal: PrincipalDep,
+    store: StoreDep,
+) -> dict[str, UUID | str]:
+    await require_http(principal, Action.ORG_CREATE, Resource(), store)
+    if not isinstance(principal, UserPrincipal):
+        raise AuthorizationError(Reason.API_KEY_DENIED)
+    org = await run_in_threadpool(
+        orgs_service.create_org, store, body.name, principal
+    )
+    return {"id": org.id, "name": org.name}
 
 
 @router.post(

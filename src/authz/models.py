@@ -34,6 +34,7 @@ class Action(StrEnum):
     ORG_MEMBER_REMOVE = "org.member.remove"
     ORG_MEMBER_ROLE_CHANGE = "org.member.role.change"
     ORG_MEMBER_TEAMS_LIST = "org.member.teams.list"
+    ORG_CREATE = "org.create"
     USER_ORGS_LIST = "user.orgs.list"
     WORKFLOW_LIST = "workflow.list"
     WORKFLOW_CREATE = "workflow.create"
