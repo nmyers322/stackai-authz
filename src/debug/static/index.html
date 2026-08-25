@@ -292,7 +292,7 @@
           </div>
           <div class="block">
             <h2>Real API actions</h2>
-            <p class="hint">These go through <code>authorize()</code>. Any user may create an org (becomes super-admin). Use a super-admin to mutate memberships. Browse “user teams / orgs” uses the Principal user.</p>
+            <p class="hint">These go through <code>authorize()</code>. Any user may create an org (becomes super-admin). Use a super-admin to mutate memberships. Browse “user teams / orgs” uses the Target user below — Principal is only who is calling.</p>
             <div class="actions">
               <div class="action-group">
                 <h3>Organizations</h3>
@@ -310,6 +310,10 @@
               </div>
               <div class="action-group">
                 <h3>Browse</h3>
+                <div style="margin-bottom:0.55rem">
+                  <label>Target user</label>
+                  <select id="browseUser"></select>
+                </div>
                 <div class="buttons">
                   <button class="blue" data-probe="listTeams" type="button">GET teams</button>
                   <button class="blue" data-probe="listUserTeams" type="button">GET user teams</button>
@@ -334,6 +338,13 @@
                     <label>User to add</label>
                     <select id="orgAddUser"></select>
                   </div>
+                  <div>
+                    <label>Org role</label>
+                    <select id="orgRole">
+                      <option>member</option>
+                      <option>super_admin</option>
+                    </select>
+                  </div>
                   <button data-probe="addOrgMember" type="button">Add org member</button>
                 </div>
                 <div class="form-row" style="margin-top:0.55rem">
@@ -342,28 +353,30 @@
                     <select id="orgMemberUser"></select>
                   </div>
                   <button data-probe="removeOrgMember" class="danger" type="button">Remove org member</button>
-                </div>
-                <div class="form-row" style="margin-top:0.55rem">
-                  <div class="grow">
-                    <label>Org role</label>
-                    <select id="orgRole">
-                      <option>member</option>
-                      <option>super_admin</option>
-                    </select>
-                  </div>
                   <button data-probe="patchOrgRole" type="button">Update org role</button>
                 </div>
               </div>
               <div class="action-group">
                 <h3>Team membership</h3>
-                <div style="margin-bottom:0.55rem">
-                  <label>Team</label>
-                  <select id="team"></select>
+                <div class="form-row" style="margin-bottom:0.55rem">
+                  <div class="grow">
+                    <label>Team</label>
+                    <select id="team"></select>
+                  </div>
+                  <button data-probe="deleteTeam" class="danger" type="button">Delete team</button>
                 </div>
                 <div class="form-row">
                   <div class="grow">
                     <label>User to add</label>
                     <select id="teamAddUser"></select>
+                  </div>
+                  <div>
+                    <label>Team role</label>
+                    <select id="teamRole">
+                      <option>viewer</option>
+                      <option>editor</option>
+                      <option>admin</option>
+                    </select>
                   </div>
                   <button data-probe="addTeamMember" type="button">Add team member</button>
                 </div>
@@ -373,25 +386,36 @@
                     <select id="teamMemberUser"></select>
                   </div>
                   <button data-probe="removeTeamMember" class="danger" type="button">Remove team member</button>
-                </div>
-                <div class="form-row" style="margin-top:0.55rem">
-                  <div class="grow">
-                    <label>Team role</label>
-                    <select id="teamRole">
-                      <option>viewer</option>
-                      <option>editor</option>
-                      <option>admin</option>
-                    </select>
-                  </div>
                   <button data-probe="patchTeamRole" type="button">Update team role</button>
                 </div>
               </div>
               <div class="action-group">
-                <h3>Execute</h3>
-                <div style="margin-bottom:0.55rem">
-                  <label>Workflow</label>
-                  <select id="workflow"></select>
+                <h3>Workflows</h3>
+                <div class="form-row" style="margin-bottom:0.55rem">
+                  <div class="grow">
+                    <label>Workflow</label>
+                    <select id="workflow"></select>
+                  </div>
+                  <button data-probe="deleteWorkflow" class="danger" type="button">Delete workflow</button>
                 </div>
+                <div class="form-row">
+                  <div class="grow">
+                    <label>Workflow name</label>
+                    <input id="workflowName" placeholder="Demo flow" value="Demo flow" />
+                  </div>
+                  <div class="grow">
+                    <label>Visibility</label>
+                    <select id="workflowVisibility">
+                      <option value="team">team</option>
+                      <option value="public">public</option>
+                      <option value="password">password</option>
+                      <option value="org">org</option>
+                    </select>
+                  </div>
+                  <button data-probe="createWorkflow" type="button">Create</button>
+                  <button data-probe="updateWorkflow" type="button">PUT replace</button>
+                </div>
+                <p class="hint" style="margin-top:0.45rem;margin-bottom:0.55rem">Create/PUT use the Team selected under Team membership. Selecting a workflow loads its name and visibility. Password visibility uses the seeded export password from catalog.</p>
                 <div class="buttons">
                   <button data-probe="execute" type="button">Execute</button>
                   <button class="blue" data-probe="exportPublic" type="button">Export (no auth)</button>
@@ -574,6 +598,31 @@
         (workflow) => `${workflow.name} [${workflow.visibility}]`,
         (workflow) => workflow.id,
       );
+      fillWorkflowForm();
+    }
+
+    function fillWorkflowForm() {
+      const data = state.catalog;
+      if (!data) return;
+      const workflow = data.workflows.find((row) => row.id === $("workflow").value);
+      if (!workflow) return;
+      $("workflowName").value = workflow.name;
+      $("workflowVisibility").value = workflow.visibility;
+      if ([...$("team").options].some((option) => option.value === workflow.team_id)) {
+        $("team").value = workflow.team_id;
+        fillTeamMembers();
+      }
+    }
+
+    function workflowWriteBody() {
+      const visibility = $("workflowVisibility").value;
+      const body = {
+        team_id: $("team").value,
+        name: $("workflowName").value,
+        visibility,
+      };
+      if (visibility === "password") body.password = state.catalog.export_password;
+      return body;
     }
 
     async function refresh() {
@@ -582,6 +631,7 @@
       const data = JSON.parse(text);
       state.catalog = data;
       fillSelect($("user"), data.users, userLabel, (u) => u.id);
+      fillSelect($("browseUser"), data.users, userLabel, (u) => u.id);
       fillSelect($("manageUser"), data.users, userLabel, (u) => u.id);
       fillSelect($("apiKey"), data.api_keys, (k) => `${k.name}`, (k) => k.key);
       fillSelect($("org"), data.orgs, (o) => o.name, (o) => o.id);
@@ -600,15 +650,19 @@
       createOrg: () => call("POST", "/orgs", { body: { name: $("orgName").value } }),
       listTeams: () => call("GET", `/orgs/${$("org").value}/teams`),
       createTeam: () => call("POST", `/orgs/${$("org").value}/teams`, { body: { name: $("teamName").value } }),
+      deleteTeam: () => call("DELETE", `/orgs/${$("org").value}/teams/${$("team").value}`),
       addOrgMember: () => call("POST", `/orgs/${$("org").value}/members/${$("orgAddUser").value}`, { body: { role: $("orgRole").value } }),
       patchOrgRole: () => call("PATCH", `/orgs/${$("org").value}/members/${$("orgMemberUser").value}`, { body: { role: $("orgRole").value } }),
       removeOrgMember: () => call("DELETE", `/orgs/${$("org").value}/members/${$("orgMemberUser").value}`),
       addTeamMember: () => call("POST", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("teamAddUser").value}`, { body: { role: $("teamRole").value } }),
       patchTeamRole: () => call("PATCH", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("teamMemberUser").value}`, { body: { role: $("teamRole").value } }),
       removeTeamMember: () => call("DELETE", `/orgs/${$("org").value}/teams/${$("team").value}/members/${$("teamMemberUser").value}`),
-      listUserTeams: () => call("GET", `/orgs/${$("org").value}/members/${$("user").value}/teams`),
-      listUserOrgs: () => call("GET", `/users/${$("user").value}/orgs`),
+      listUserTeams: () => call("GET", `/orgs/${$("org").value}/members/${$("browseUser").value}/teams`),
+      listUserOrgs: () => call("GET", `/users/${$("browseUser").value}/orgs`),
       listWorkflows: () => call("GET", `/orgs/${$("org").value}/workflows`),
+      createWorkflow: () => call("POST", `/orgs/${$("org").value}/workflows`, { body: workflowWriteBody() }),
+      updateWorkflow: () => call("PUT", `/orgs/${$("org").value}/workflows/${$("workflow").value}`, { body: workflowWriteBody() }),
+      deleteWorkflow: () => call("DELETE", `/orgs/${$("org").value}/workflows/${$("workflow").value}`),
       execute: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute`),
       exportPublic: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute-exported`, { kind: "anon" }),
       exportPassword: () => call("POST", `/orgs/${$("org").value}/workflows/${$("workflow").value}/execute-exported`, {
@@ -630,6 +684,7 @@
     $("refresh").onclick = refresh;
     $("org").onchange = fillOrgScopedSelects;
     $("team").onchange = fillTeamMembers;
+    $("workflow").onchange = fillWorkflowForm;
     $("clearLog").onclick = () => { $("log").innerHTML = ""; };
     $("createUser").onclick = async () => {
       await call("POST", "/debug/users", { privileged: true, body: { email: $("newEmail").value } });
@@ -648,6 +703,22 @@
             try {
               $("org").value = JSON.parse(result.text).id;
               fillOrgScopedSelects();
+            } catch {
+              /* keep prior selection */
+            }
+          }
+          if (button.dataset.probe === "createWorkflow" && result.response.ok) {
+            try {
+              $("workflow").value = JSON.parse(result.text).id;
+              fillWorkflowForm();
+            } catch {
+              /* keep prior selection */
+            }
+          }
+          if (button.dataset.probe === "createTeam" && result.response.ok) {
+            try {
+              $("team").value = JSON.parse(result.text).id;
+              fillTeamMembers();
             } catch {
               /* keep prior selection */
             }

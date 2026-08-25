@@ -50,7 +50,7 @@ Postgres RLS is enabled default-deny on every exposed table, but it is **not** t
 
 ## Who may do what
 
-**Org `member` has no org-admin powers** — they act through team membership (including the default team). **Team roles nest: admin ⊃ editor ⊃ viewer.** Org super-admin bypasses team checks inside the engine, never in handlers.
+**Org `member` has no org-admin powers** — they act through team membership (including the default team). **Team roles nest: admin ⊃ editor ⊃ viewer.** Org super-admin bypasses team checks inside the engine, never in handlers. **Any authenticated user may `POST /orgs`** and becomes that org’s `super_admin` (and default-team `admin`); API keys and anonymous callers cannot.
 
 | | Super-admin | Team admin | Editor | Viewer | Org member | API key | Anonymous |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -63,9 +63,9 @@ Postgres RLS is enabled default-deny on every exposed table, but it is **not** t
 | Execute **exported** workflow | by visibility | by visibility | by visibility | by visibility | by visibility | public / password only | public / password only |
 | List **own** orgs / teams | yes | yes | yes | yes | yes | | |
 
-\* API keys are org-scoped: they may list and execute workflows in **their** org only. They may never create teams, mutate memberships, delete workflows, or reach org-only exports.
+\* API keys are org-scoped: they may list and execute workflows in **their** org only. They may never create orgs or teams, mutate memberships, delete workflows, or reach org-only exports.
 
-**Self-service is read-only.** Callers may list their own orgs and teams, but cannot add themselves, change their own role, or leave. An org super-admin may list anyone's teams *in that org*; listing another user's orgs is denied — it would leak memberships in other orgs. There is no platform-wide admin.
+**Membership self-service is read-only** (except org create). Callers may list their own orgs and teams, but cannot add themselves, change their own role, or leave. An org super-admin may list anyone's teams *in that org*; listing another user's orgs is denied — it would leak memberships in other orgs. There is no platform-wide admin.
 
 ### Workflow visibility
 
@@ -84,25 +84,34 @@ Workflow `visibility` is `team | public | password | org`:
 
 ## HTTP contract
 
-| Method | Path |
-| --- | --- |
-| `POST` | `/orgs` |
-| `POST` `GET` | `/orgs/{org_id}/teams` |
-| `DELETE` | `/orgs/{org_id}/teams/{team_id}` |
-| `POST` `DELETE` `PATCH` | `/orgs/{org_id}/teams/{team_id}/members/{user_id}` |
-| `POST` `DELETE` `PATCH` | `/orgs/{org_id}/members/{user_id}` |
-| `GET` | `/orgs/{org_id}/members/{user_id}/teams` |
-| `GET` | `/users/{user_id}/orgs` |
-| `GET` `POST` | `/orgs/{org_id}/workflows` |
-| `PUT` `DELETE` | `/orgs/{org_id}/workflows/{workflow_id}` |
-| `POST` | `/orgs/{org_id}/workflows/{workflow_id}/execute` |
-| `POST` | `/orgs/{org_id}/workflows/{workflow_id}/execute-exported` |
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/orgs` | Create an org (caller becomes org `super_admin` + default-team `admin`) |
+| `POST` | `/orgs/{org_id}/teams` | Create a team |
+| `GET` | `/orgs/{org_id}/teams` | Teams in the org the caller may see (browse; not membership+role) |
+| `DELETE` | `/orgs/{org_id}/teams/{team_id}` | Delete a team (not the default org team) |
+| `POST` | `/orgs/{org_id}/teams/{team_id}/members/{user_id}` | Add a team membership (role in body) |
+| `DELETE` | `/orgs/{org_id}/teams/{team_id}/members/{user_id}` | Remove a team membership |
+| `PATCH` | `/orgs/{org_id}/teams/{team_id}/members/{user_id}` | Change team membership role |
+| `POST` | `/orgs/{org_id}/members/{user_id}` | Add an org membership |
+| `DELETE` | `/orgs/{org_id}/members/{user_id}` | Remove an org membership |
+| `PATCH` | `/orgs/{org_id}/members/{user_id}` | Change org membership role |
+| `GET` | `/orgs/{org_id}/members/{user_id}/teams` | Teams this user belongs to in this org, with team role (self or org super-admin) |
+| `GET` | `/users/{user_id}/orgs` | Orgs this user belongs to, with org role (self only) |
+| `GET` | `/orgs/{org_id}/workflows` | Workflows the caller may see |
+| `POST` | `/orgs/{org_id}/workflows` | Create workflow |
+| `PUT` | `/orgs/{org_id}/workflows/{workflow_id}` | Replace workflow (name, team, visibility, optional export password) |
+| `DELETE` | `/orgs/{org_id}/workflows/{workflow_id}` | Delete a workflow |
+| `POST` | `/orgs/{org_id}/workflows/{workflow_id}/execute` | Execute (logged-in / API key) |
+| `POST` | `/orgs/{org_id}/workflows/{workflow_id}/execute-exported` | Execute exported (anonymous when visibility permits; optional `password`) |
+
+Header `X-Api-Key` is accepted on workflow routes as a second principal.
 
 **Status codes.** Creates `201` · PUT/PATCH `200` · deletes `204` · invalid UUID `422` · unknown resource `404` · conflict `409` · missing or bad credentials `401` · authenticated-but-denied `403` with `{"error": "forbidden", "reason": "..."}`.
 
 **Authentication.** User calls send `Authorization: Bearer <access_token>` from Supabase Auth, verified via JWKS (ES256/RS256 — not the legacy HS256 shared secret). Workflow routes also accept `X-Api-Key`; when both are present, the API key wins.
 
-**Notes.** `POST /orgs` is self-serve: any authenticated user becomes that org’s `super_admin` (and default-team `admin`). `POST /workflows` is create-only; `PUT` replaces the workflow. Role changes are `PATCH`. API keys are seeded (no create-key route).
+**Notes.** `POST /orgs` is self-serve bootstrap. `POST /workflows` is create-only (not upsert); `PUT` replaces. Role changes are `PATCH`. API keys are seeded (no create-key route).
 
 ---
 
@@ -225,9 +234,9 @@ Not part of the HTTP contract. Never enable in Compose or production.
 ```
 src/authn/     JWT (JWKS) and API-key principal resolution
 src/authz/     authorize(), models, in-memory + Postgres stores
-src/orgs/      org memberships, list-own-orgs
+src/orgs/      create org, org memberships, list-own-orgs
 src/teams/     teams and team memberships
-src/workflows/ workflows, execute, exported execute
+src/workflows/ create/PUT/delete, execute, exported execute
 src/debug/     local lab UI — mounted only if APP_DEBUG=true
 ```
 
